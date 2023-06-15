@@ -355,42 +355,43 @@ if __name__ == '__main__':
     parser.add_argument('--full_dataset', action='store_true')
     args = parser.parse_args()
     print(str(args))
-
-    with open('./data/union_data_torch_geometric_graph_ontology.pkl', 'rb') as fi:
-        data = pickle.load(fi)
-
-    if args.full_dataset:
-        ## full data set
-        with open('./data/trvate_idx.pkl', 'rb') as fi:
-            split = pickle.load(fi)
-        split = (split[0], split[1], split[2])
-
+    
+    
+    PRETRAIN = True
+    if PRETRAIN:
+        n_ms = 1000
     else:
-        ## M+H data set
-        with open('./data/MHfilter_trvate_idx.pkl', 'rb') as fi:
-            split = pickle.load(fi)
+        with open('./data/union_data_torch_geometric_graph_ontology.pkl', 'rb') as fi:
+            data = pickle.load(fi)
 
-        with open("./data/filter_te_idx.pkl", 'rb') as f:
-            filter_te_idx = pickle.load(f)
-        split = (split[0], split[1], filter_te_idx)
+        if args.full_dataset:
+            ## full data set
+            with open('./data/trvate_idx.pkl', 'rb') as fi:
+                split = pickle.load(fi)
+            split = (split[0], split[1], split[2])
 
-    train_mask, val_mask, test_mask = compute_data_split(len(data), random=False, split=split)
+        else:
+            ## M+H data set
+            with open('./data/MHfilter_trvate_idx.pkl', 'rb') as fi:
+                split = pickle.load(fi)
 
-    train_ms = [data[i][4] for i in range(len(data)) if train_mask[i]]
-    train_ms = np.vstack(train_ms)
-    lda_topic = compute_lda_feature(train_ms)
+            with open("./data/filter_te_idx.pkl", 'rb') as f:
+                filter_te_idx = pickle.load(f)
+            split = (split[0], split[1], filter_te_idx)
 
-    train_data = [data[i] for i in range(len(data)) if train_mask[i]]
-    val_data = [data[i] for i in range(len(data)) if val_mask[i]]
+        train_mask, val_mask, test_mask = compute_data_split(len(data), random=False, split=split)
 
-    # append lda feature
-    if not args.disable_mt_lda:
-        for i in range(len(train_data)):
-            train_data[i].append(lda_topic[i])
+        train_ms = [data[i][4] for i in range(len(data)) if train_mask[i]]
+        train_ms = np.vstack(train_ms)
+        lda_topic = compute_lda_feature(train_ms)
 
+        train_data = [data[i] for i in range(len(data)) if train_mask[i]]
+        val_data = [data[i] for i in range(len(data)) if val_mask[i]]
 
-    # with open('./data/1000bin_train_model_selector_with_weight.pkl', 'rb') as fi:
-    #     train_data_fl = pickle.load(fi)
+        # append lda feature
+        if not args.disable_mt_lda:
+            for i in range(len(train_data)):
+                train_data[i].append(lda_topic[i])
 
     # train_fl_loader = DataLoader(train_data_fl, batch_size=args.batch_size, shuffle=True, collate_fn=batch_data_list_fl)
 
