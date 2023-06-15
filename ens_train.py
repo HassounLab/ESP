@@ -75,11 +75,11 @@ def compute_rank(model=-1, stop_i=-1):
     gnn_model.eval()
     ensemble_model.eval()
 
-    test_data_list = [data[i] for i in range(len(data)) if test_mask[i]]
+    with open('./data/test_data_list_100.pkl', 'rb') as fi:
+        test_data_list_100 = pickle.load(fi)
 
-    # with open('./data/torch_tecand_1000bin_te_cand.pkl', 'rb') as fi:
-    with open('./data/test_candidate_torch_geometric_graph.pkl', 'rb') as fi:# test_candidate_torch_geometric_graph
-        test_candidate_dict = pickle.load(fi)
+    with open('./data/test_candidate_dict_100.pkl', 'rb') as fi:# test_candidate_torch_geometric_graph
+        test_candidate_dict_100 = pickle.load(fi)
 
 
     # similarity = '_least'
@@ -101,7 +101,7 @@ def compute_rank(model=-1, stop_i=-1):
     mlp_loss, gnn_loss, mlp_rank, gnn_rank = [], [], [], []
     label = []
     loss_diff = []
-    for i in tqdm(range(len(test_data_list))):
+    for i in tqdm(range(len(test_data_list_100))):
         # if i > 0 and i % 100 == 0:
         #     print("Average rank %.3f +- %.3f" % (np.mean(rank), np.std(rank)))
         # if stop_i != -1 and i >= stop_i:
@@ -113,10 +113,10 @@ def compute_rank(model=-1, stop_i=-1):
         #     gnn_out = pred_out[1].to(device)
         #     by = pred_out[2].to(device)
         # except:
-        test_data = test_data_list[i]
+        test_data = test_data_list_100[i]
         test_data[2][1] = test_data[2][1][:, :num_atom_type]
         test_inchi_key = test_data[0]
-        test_candidate_val = test_candidate_dict[test_inchi_key]
+        test_candidate_val = test_candidate_dict_100[test_inchi_key]
 
         test_candidate = convert_candidate_to_data_list(test_data, copy.deepcopy(test_candidate_val))
 
