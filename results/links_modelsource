@@ -1,6 +1,2 @@
-best_model_mlp_e.pt
-- https://www.dropbox.com/s/9t36t23spe4m4eo/best_model_mlp_e.pt?dl=0
-best_model_gnn_e.pt
-- https://www.dropbox.com/s/xjcoukcs3sqlxwd/best_model_gnn_e.pt?dl=0
-best_model_ens_e.pt
-- https://www.dropbox.com/s/h3nq9w3k6byc2rg/best_model_ens_e.pt?dl=0
+We have recently communicated with some of the curators for the NIST datasets, and we were instructed to not release any trained models or the data.  
+We have therefore modified our GitHub repository to exclude the trained models.
