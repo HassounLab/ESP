@@ -1,10 +1,13 @@
 # Ensembled Spectral Prediction for Metabolite Annotation (ESP)
 
-### Xinmeng Li, Hao Zhu, Li-Ping Liu, Soha Hassoun
+### Xinmeng Li, Yan Zhou Chen, Apurva Kalia, Hao Zhu, Li-Ping Liu, Soha Hassoun
 #### Department of Computer Science, Tufts University
 
 A key challenge in metabolomics is annotating spectra measured from a biological sample with chemical identities. We improve on prior neural network-based annotation approaches, namely MLP-based [1] and GNN-based [2] approaches. We propose a novel ensemble model to take advantage of both MLP and GNN models. First, the MLP and GNN are enhanced by: 1) multi-tasking on additional data (spectral topic labels obtained using LDA (Latent Dirichlet Allocation) [3], and 2) attention mechanism to capture dependencies among spectra peaks. Next, we create an Ensembled Spectral Prediction (ESP) model that is trained on ranking tasks to generate the average weighted MLP and GNN spectral predictions. Our results, measured in average rank and Rank@K for the test spectra, show remarkable performance gain over existing neural network approaches.
 
+As our aim is to fundamentally evaluate deep learning models, we created two baseline methods that can be easily implemented and replicated (with our code, or others) to do comparisons: the MLP and GNN models, per Equations 1-10.  We have shown improvements with ESP over the MLP model (implementation of NEIMS model (Wei et al., 2019) with a generalized dataset ESI/LC-MS but not EI/GC-MS data in NEIMS), in terms of a 23.7% increase in average rank performance on the full NIST candidate set. We also show 37.2% improvement in average rank over the baseline GNN model, initially presented by our group (Hao et al., 2020), which was the first to use GNNs in mass spectra annotation. The MLP and GNN are the simplest possible baseline models for comparing ML techniques - they are easily implemented and suited for re-training and evaluation when comparing to other techniques and other datasets.
+
+In accordance with NIST license regulations, we are unable to publish the NIST-20 data alongside our models trained on NIST-20. Models pretrained on CANOPUS are located in /pretrained_models. CANOPUS dataset can be accessed from https://github.com/samgoldman97/mist.
 
 ## Requirements
 
