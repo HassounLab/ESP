@@ -9,6 +9,8 @@ As our aim is to fundamentally evaluate deep learning models, we created two bas
 
 In accordance with NIST license regulations, we are unable to publish the NIST-20 data alongside our models trained on NIST-20. Models pretrained on CANOPUS are located in /pretrained_models. CANOPUS dataset can be accessed from https://github.com/samgoldman97/mist.
 
+The pretrained MLP, GNN, and ESP models on the CANOPUS dataset are `/pretrained_models/best_model_mlp_can.pt`, `/pretrained_models/best_model_gnn_can.pt`, and `/pretrained_models/ESP_can.pt`, respectfully.
+
 ## Requirements
 
 ### Server/Laptop Requirements
