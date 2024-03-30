@@ -66,7 +66,7 @@ python data_tecand.py
 #### `train.py`
 This script is used for training and restoring saved GNN and MLP models.
 
-### `ens_train.py`
+#### `ens_train.py`
 This script is used for training and restoring saved ESP models.
 
 To run the saved GNN model on a test set, set `--te_cand_dataset_suffix` to the desired test set and `--model_file_suffix` to the model which you wish to use.
