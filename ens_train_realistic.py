@@ -23,6 +23,7 @@ num_atom_type = 27
 
 
 def train(epoch):
+    best_val = 0
     mlp_model.eval()
     gnn_model.eval()
 
@@ -48,14 +49,20 @@ def train(epoch):
 
             train_loss.append(loss.item())
 
-        print("epoch %d, train loss %.2f" % (epoch_i + 1, np.mean(train_loss)))
+        # print("epoch %d, train loss %.2f" % (epoch_i + 1, np.mean(train_loss)))
+        val_spec_loss = eval(val_loader)
 
-        torch.save(ensemble_model.state_dict(), './results/fp_' + ensemble_model_identifier + '_epoch' + str(epoch_i) + '.pt')
+        loss2file(epoch_i, np.mean(train_loss), val_spec_loss)
+        if val_spec_loss > best_val:
+            torch.save(ensemble_model.state_dict(), './pretrained_models/' + args.ens_model_file_suffix + '.pt')
+            best_val = val_spec_loss
+
+        # torch.save(ensemble_model.state_dict(), './results/' + ensemble_model_identifier + '_epoch' + str(epoch_i) + '.pt')
 
         # eval
-        test_data_rank, _ = compute_rank()
-        test_data_rank = np.array(test_data_rank)
-        rank2file(epoch_i, test_data_rank)
+        # test_data_rank, _ = compute_rank()
+        # test_data_rank = np.array(test_data_rank)
+        # rank2file(epoch_i, test_data_rank)
 
 def rank2file(i_epoch, test_data_rank):
     file2write.writelines("%d\n" % i_epoch)
@@ -65,12 +72,52 @@ def rank2file(i_epoch, test_data_rank):
     file2write.writelines("\n\n\n")
     file2write.flush()
 
+def loss2file(i_epoch, train_bce_loss, val_spec_loss):
+    file2write.writelines("%d \t %.4f \t %.4f\n"%(i_epoch, train_bce_loss, val_spec_loss))
+    file2write.flush()
+
+## YAN #######
+@torch.no_grad()
+def eval(loader):
+    is_train = ensemble_model.training
+
+    mlp_model.eval()
+    gnn_model.eval()
+    ensemble_model.eval()
+    eval_cosine = []
+    for eval_data_batch in loader:
+
+        eval_data_batch = eval_data_batch.to(device)
+
+        mlp_out, _, _ = mlp_model(eval_data_batch.x, eval_data_batch.edge_index, eval_data_batch.edge_attr,
+                            eval_data_batch.batch,
+                            eval_data_batch.instrument, eval_data_batch.fp, eval_data_batch.shift, return_logits=True)
+
+        gnn_out, _, _ = gnn_model(eval_data_batch.x, eval_data_batch.edge_index, eval_data_batch.edge_attr,
+                            eval_data_batch.batch,
+                            eval_data_batch.instrument, eval_data_batch.fp, eval_data_batch.shift, return_logits=True)
+
+        bins = eval_data_batch.y
+        bins = torch.round(bins * 100.0) / 100.0
+        bins = (bins - bins.mean()) / bins.std()
+
+        ensemble_w = ensemble_model(bins)
+
+        out = ensemble_w * mlp_out + (1.0 - ensemble_w) * gnn_out
+
+        loss = -F.cosine_similarity(out, eval_data_batch.y).mean()
+        eval_cosine.append(-loss.item())
+
+    if is_train:
+        ensemble_model.train()
+
+    return np.mean(eval_cosine)
 
 @torch.no_grad()
 def compute_rank(model=-1, stop_i=-1):
     # ensemble_model.load_state_dict(torch.load('./results/'+args.ensemble_model_file_suffix, map_location='cpu'))  # TODO
     # ensemble_model.load_state_dict(torch.load('./results/best_model_ens_e.pt', map_location='cpu'))  # TODO
-
+    ensemble_model.load_state_dict(torch.load('./pretrained_models/'+args.ens_model_file_suffix + '.pt', map_location='cpu'))
     mlp_model.eval()
     gnn_model.eval()
     ensemble_model.eval()
@@ -113,23 +160,41 @@ def compute_rank(model=-1, stop_i=-1):
             test_candidate_val = test_cand_list[i]
 
             test_candidate = convert_candidate_to_data_list(test_data, copy.deepcopy(test_candidate_val))
+            
+            # print(test_data)
+            # print(type(test_data[2][1]))
+            # print(type(test_candidate[-2][2][1]))
+            # rank_data_batch = batch_data_list([test_data] + test_candidate)
+            # rank_data_batch = rank_data_batch.to(device)
 
-            rank_data_batch = batch_data_list([test_data] + test_candidate)
-            rank_data_batch = rank_data_batch.to(device)
+            batch_list = [test_data] + test_candidate
+            cand_loader = DataLoader(batch_list, batch_size=args.batch_size, shuffle=False, collate_fn=batch_data_list)
+            by = torch.Tensor().to(device)
 
-            # mlp_out, _, mlp_logits
-            mlp_out, _, _ = mlp_model(rank_data_batch.x, rank_data_batch.edge_index, rank_data_batch.edge_attr,
-                                   rank_data_batch.batch,
-                                   rank_data_batch.instrument, rank_data_batch.fp, rank_data_batch.shift, return_logits=True)
+            mlp_out = torch.Tensor().to(device)
+            gnn_out = torch.Tensor().to(device)
 
-            # gnn_out, _, gnn_logits
-            gnn_out, _, _ = gnn_model(rank_data_batch.x, rank_data_batch.edge_index, rank_data_batch.edge_attr,
-                                   rank_data_batch.batch,
-                                   rank_data_batch.instrument, rank_data_batch.fp, rank_data_batch.shift, return_logits=True)
+            for rank_data_batch in cand_loader:
+                rank_data_batch = rank_data_batch.to(device)
 
-            by = rank_data_batch.y
-            pred_out = torch.vstack([mlp_out[None, :, :], gnn_out[None, :, :], rank_data_batch.y[None, :, :]])
-            torch.save(pred_out, ("./results/cached_mlp_gnn_pred_" + args.mode + "_" + str(args.bins) + "/%d.pt" % i))
+                # mlp_out, _, mlp_logits
+                mlp_out_curr, _, _ = mlp_model(rank_data_batch.x, rank_data_batch.edge_index, rank_data_batch.edge_attr,
+                                    rank_data_batch.batch,
+                                    rank_data_batch.instrument, rank_data_batch.fp, rank_data_batch.shift, return_logits=True)
+
+                # gnn_out, _, gnn_logits
+                gnn_out_curr, _, _ = gnn_model(rank_data_batch.x, rank_data_batch.edge_index, rank_data_batch.edge_attr,
+                                    rank_data_batch.batch,
+                                    rank_data_batch.instrument, rank_data_batch.fp, rank_data_batch.shift, return_logits=True)
+
+                by_curr = rank_data_batch.y
+                # pred_out_curr = torch.vstack([mlp_out[None, :, :], gnn_out[None, :, :], rank_data_batch.y[None, :, :]])
+                # torch.save(pred_out, ("./results/cached_mlp_gnn_pred/%d.pt" % i))
+
+
+                by = torch.cat([by, by_curr])
+                mlp_out = torch.cat([mlp_out, mlp_out_curr])
+                gnn_out = torch.cat([gnn_out, gnn_out_curr])
 
         # ensemble_w = ensemble_model(mlp_logits.detach(), gnn_logits.detach())
         # if ensemble_w[0] < 0.5:
@@ -176,13 +241,25 @@ def compute_rank(model=-1, stop_i=-1):
 
         # if ensemble_w.item() > 0.5:
         #     ensemble_w = torch.ones_like(mlp_out)
-        # else:
+        # else:     
         #     ensemble_w = torch.zeros_like(mlp_out)
 
+
+        #### right #########
         bins = by[0].unsqueeze(0)
         bins = torch.round(bins * 100.0) / 100.0
         bins = (bins - bins.mean()) / bins.std()
         ensemble_w = ensemble_model(bins)
+        #### right #########
+
+        # ##### loss #########
+        # mlp_loss_b = -cosine_sim_mlp_all[0]
+        # gnn_loss_b = -cosine_sim_gnn_all[0]
+        # ensemble_w = 2* (gnn_loss_b - mlp_loss_b) / (mlp_loss_b + gnn_loss_b)
+
+        # ##### loss #########
+
+
 
         # if ensemble_w.squeeze().item() > 0.5:
         #     ensemble_w = torch.ones_like(ensemble_w)
@@ -215,7 +292,7 @@ def compute_rank(model=-1, stop_i=-1):
     #          mlp_rank=mlp_rank, gnn_rank=gnn_rank,
     #          mlp_loss=mlp_loss, gnn_loss=gnn_loss)
 
-    return rank, loss_list
+    return rank, loss_list, np.array(gnn_rank), np.array(gnn_loss), np.array(mlp_rank), np.array(mlp_loss)
 
 
 def construct_train_dataset():
@@ -337,12 +414,14 @@ if __name__ == '__main__':
     parser.add_argument('--train_with_test_ratio_hist_size', type=int, default=-1)
 
     parser.add_argument('--full_dataset', action='store_true')
+
+    parser.add_argument('--ens_model_file_suffix', type=str, default='')
     args = parser.parse_args()
     print(str(args))
 
-    dir_path = "./data/relistic/"
+    dir_path = "./data/realistic/"
 
-    with open(dir_path + args.mode + '.pkl', 'rb') as f:
+    with open(dir_path + args.mode + '_trvate_split.pkl', 'rb') as f:
         split_dict = pickle.load(f)
 
     with open(dir_path + 'train_' + str(args.bins) + 'bin.pkl', 'rb') as f:
@@ -352,18 +431,21 @@ if __name__ == '__main__':
         test_cand_list = pickle.load(f)
 
     train_data = []
+    val_data = []
     test_data_list = []
     for ik in split_dict['train']:
         train_data.extend(all_data_by_iks[ik])
     for ik in split_dict['test']:
         test_data_list.extend(all_data_by_iks[ik])
+    for ik in split_dict['val']:
+        val_data.extend(all_data_by_iks[ik])
 
-    for i, ik in enumerate(split_dict['test']):
-        train_data.extend(all_data_by_iks[ik])
-        if i==6000:
-            break
+    # for i, ik in enumerate(split_dict['test']):
+    #     train_data.extend(all_data_by_iks[ik])
+    #     if i==6000:
+    #         break
 
-    assert len(test_data_list) == len(test_cand_list)
+    # assert len(test_data_list) == len(test_cand_list)
     del all_data_by_iks
 
     device = torch.device('cuda:' + str(args.cuda) if torch.cuda.is_available() else 'cpu')
@@ -375,8 +457,10 @@ if __name__ == '__main__':
                        correlation_mat_rank=args.correlation_mat_rank,
                        mt_lda_weight=args.mt_lda_weight,
                        correlation_mix_residual_weight=args.mlp_correlation_mix_residual_weight).to(device)
+    # mlp_model.load_state_dict(
+    #     torch.load(dir_path + 'best_model_mlp_' + args.mode + '.pt', map_location='cpu'))
     mlp_model.load_state_dict(
-        torch.load(dir_path + 'best_model_mlp_' + args.mode + '.pt', map_location='cpu'))
+        torch.load('./pretrained_models/best_model_mlp_pd_realistic.pt', map_location='cpu'))
 
     gnn_model = GNN_graphpred(num_layer=args.num_hidden_layers,
                               emb_dim=args.hidden_dims,
@@ -392,14 +476,17 @@ if __name__ == '__main__':
                               mt_lda_weight=args.mt_lda_weight,
                               correlation_mix_residual_weight=args.gnn_correlation_mix_residual_weight
                               ).to(device)
+    # gnn_model.load_state_dict(
+    #     torch.load(dir_path + 'best_model_gnn_' + args.mode + '.pt', map_location='cpu'))
     gnn_model.load_state_dict(
-        torch.load(dir_path + 'best_model_gnn_' + args.mode + '.pt', map_location='cpu'))
+        torch.load('./pretrained_models/best_model_gnn_pd_realistic.pt', map_location='cpu'))
 
-    construct_train_dataset()
+    # construct_train_dataset()
 
     with open(dir_path + 'ens_train_' + args.mode + '_' + str(args.bins) + '.pkl', 'rb') as fi:
         train_data_fl = pickle.load(fi)
     train_fl_loader = DataLoader(train_data_fl, batch_size=args.batch_size, shuffle=True, collate_fn=batch_data_list_fl)
+    val_loader = DataLoader(val_data, batch_size=args.batch_size, shuffle=False, collate_fn=batch_data_list)
 
     ensemble_model = torch.nn.Sequential(
             torch.nn.Linear(1000, args.ensemble_hidden_dim),
@@ -411,27 +498,35 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(ensemble_model.parameters(), lr=args.lr, weight_decay=args.l2norm)
 
-    ensemble_model_identifier = "ens_{mode}_{bins:d}_lr{lr:.6f}_l2{l2:.6f}_drop{drop:.1f}_hidden{ensemble_hidden_dim:d}".format(
-        mode=args.mode,
-        bins=args.bins,
-        lr=args.lr,
-        l2=args.l2norm,
-        drop=args.drop_ratio,
-        ensemble_hidden_dim=args.ensemble_hidden_dim,
-    ).replace('.', 'sep')
+    # ensemble_model_identifier = "ens_{mode}_{bins:d}_lr{lr:.6f}_l2{l2:.6f}_drop{drop:.1f}_hidden{ensemble_hidden_dim:d}".format(
+    #     mode=args.mode,
+    #     bins=args.bins,
+    #     lr=args.lr,
+    #     l2=args.l2norm,
+    #     drop=args.drop_ratio,
+    #     ensemble_hidden_dim=args.ensemble_hidden_dim,
+    # ).replace('.', 'sep')
+    ensemble_model_identifier = args.ens_model_file_suffix
 
     file2write = open('./results/realistic/' +ensemble_model_identifier + '.txt', 'w')
     train(args.epochs)
     file2write.close()
 
-    test_data_rank, test_data_loss = compute_rank()
+    # test_data_rank, test_data_loss = compute_rank()
+    # test_data_rank = np.array(test_data_rank)
+    # test_data_loss = np.array(test_data_loss)
+    test_data_rank, test_data_loss, gnn_rank, gnn_loss, mlp_rank, mlp_loss = compute_rank()
     test_data_rank = np.array(test_data_rank)
     test_data_loss = np.array(test_data_loss)
+
+    np.savez('./results/prediction_' + args.ens_model_file_suffix +'_realistic-te-split', ensemble_rank=test_data_rank, ensemble_loss=test_data_loss,
+            mlp_rank=mlp_rank, gnn_rank=gnn_rank,
+            mlp_loss=mlp_loss, gnn_loss=gnn_loss)
     # np.savez('./results/prediction_' + args.model_file_suffix, test_data_rank=test_data_rank,
     #          test_data_loss=test_data_loss)
 
-    print("Average rank %.3f +- %.3f" % (test_data_rank.mean(), test_data_rank.std()))
-    for i in range(1, 21):
-        print("Rank at %d %.3f" % (i, (test_data_rank <= i).sum() / float(test_data_rank.shape[0])))
+    # print("Average rank %.3f +- %.3f" % (test_data_rank.mean(), test_data_rank.std()))
+    # for i in range(1, 21):
+    #     print("Rank at %d %.3f" % (i, (test_data_rank <= i).sum() / float(test_data_rank.shape[0])))
 
 

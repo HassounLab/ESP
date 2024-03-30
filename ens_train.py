@@ -23,6 +23,7 @@ num_atom_type = 27
 
 
 def train(epoch):
+    best_val = 0
     mlp_model.eval()
     gnn_model.eval()
 
@@ -48,14 +49,24 @@ def train(epoch):
 
             train_loss.append(loss.item())
 
-        print("epoch %d, train loss %.2f" % (epoch_i + 1, np.mean(train_loss)))
+        # print("epoch %d, train loss %.2f" % (epoch_i + 1, np.mean(train_loss)))
 
-        torch.save(ensemble_model.state_dict(), './results/' + ensemble_model_identifier + '_epoch' + str(epoch_i) + '.pt')
+        val_spec_loss = eval(val_loader)
+        # print("epoch %d, val cosine sim loss %.2f" % (epoch_i + 1, val_spec_loss))
+
+        if val_spec_loss > best_val:
+            torch.save(ensemble_model.state_dict(), './pretrained_models/' + args.ens_model_file_suffix + '.pt')
+            best_val = val_spec_loss
+        loss2file(epoch_i, np.mean(train_loss), val_spec_loss)
+
+        # torch.save(ensemble_model.state_dict(), './pretrained_models/' + ensemble_model_identifier + '_epoch' + str(epoch_i) + '.pt')
+
+
 
         # eval
-        test_data_rank, _ = compute_rank()
-        test_data_rank = np.array(test_data_rank)
-        rank2file(epoch_i, test_data_rank)
+        # test_data_rank, _ = compute_rank() #YZC
+        # test_data_rank = np.array(test_data_rank) 
+        # rank2file(epoch_i, test_data_rank)
 
 def rank2file(i_epoch, test_data_rank):
     file2write.writelines("%d\n" % i_epoch)
@@ -65,29 +76,77 @@ def rank2file(i_epoch, test_data_rank):
     file2write.writelines("\n\n\n")
     file2write.flush()
 
+def loss2file(i_epoch, train_bce_loss, val_spec_loss):
+    file2write.writelines("%d \t %.4f \t %.4f\n"%(i_epoch, train_bce_loss, val_spec_loss))
+    file2write.flush()
+
+## YAN #######
+@torch.no_grad()
+def eval(loader):
+    is_train = ensemble_model.training
+
+    mlp_model.eval()
+    gnn_model.eval()
+    ensemble_model.eval()
+    eval_cosine = []
+    for eval_data_batch in loader:
+
+        eval_data_batch = eval_data_batch.to(device)
+
+        mlp_out, _, _ = mlp_model(eval_data_batch.x, eval_data_batch.edge_index, eval_data_batch.edge_attr,
+                            eval_data_batch.batch,
+                            eval_data_batch.instrument, eval_data_batch.fp, eval_data_batch.shift, return_logits=True)
+
+        gnn_out, _, _ = gnn_model(eval_data_batch.x, eval_data_batch.edge_index, eval_data_batch.edge_attr,
+                            eval_data_batch.batch,
+                            eval_data_batch.instrument, eval_data_batch.fp, eval_data_batch.shift, return_logits=True)
+
+        bins = eval_data_batch.y
+        bins = torch.round(bins * 100.0) / 100.0
+        bins = (bins - bins.mean()) / bins.std()
+
+        ensemble_w = ensemble_model(bins)
+
+        out = ensemble_w * mlp_out + (1.0 - ensemble_w) * gnn_out
+
+        loss = -F.cosine_similarity(out, eval_data_batch.y).mean()
+        eval_cosine.append(-loss.item())
+
+    if is_train:
+        ensemble_model.train()
+
+    return np.mean(eval_cosine)
+################
 
 @torch.no_grad()
 def compute_rank(model=-1, stop_i=-1):
-    # ensemble_model.load_state_dict(torch.load('./results/'+args.ensemble_model_file_suffix, map_location='cpu'))  # TODO
-    ensemble_model.load_state_dict(torch.load('./results/best_model_ens_e.pt', map_location='cpu'))  # TODO
+    ensemble_model.load_state_dict(torch.load('./pretrained_models/'+args.ens_model_file_suffix + '.pt', map_location='cpu'))
+    # ensemble_model.load_state_dict(torch.load('./results/best_model_ens_e.pt', map_location='cpu'))  # TODO
 
     mlp_model.eval()
     gnn_model.eval()
     ensemble_model.eval()
 
-    with open('./data/test_data_list_100.pkl', 'rb') as fi:
-        test_data_list_100 = pickle.load(fi)
+    # with open('./data/test_data_list_100.pkl', 'rb') as fi:
+    #     test_data_list_100 = pickle.load(fi)
 
-    with open('./data/test_candidate_dict_100.pkl', 'rb') as fi:# test_candidate_torch_geometric_graph
-        test_candidate_dict_100 = pickle.load(fi)
+    # with open('./data/.pkl', 'rb') as fi: #
+    #     test_data_list_100 = pickle.load(fi)
+
+    ## YAN ###
+    test_data_list_100 = [data[i] for i in range(len(data)) if test_mask[i]]
+    ##########
 
 
-    # similarity = '_least'
-    # print(similarity)
-    # if similarity == '_original':
-    #     with open('./data/torch_tecand_1000bin_te_cand100.pkl', 'rb') as fi:
-    #         test_candidate_dict = pickle.load(fi)
-    #     test_candidate_dict = test_candidate_dict
+    # with open('./data/test_candidate_dict_100.pkl', 'rb') as fi:# test_candidate_torch_geometric_graph
+    #     test_candidate_dict_100 = pickle.load(fi)
+
+
+    similarity = '_original'
+    if similarity == '_original':
+        with open('./data/'+ args.te_cand_dataset_suffix +'.pkl', 'rb') as fi:
+            test_candidate_dict = pickle.load(fi)
+        test_candidate_dict_100 = test_candidate_dict
     # elif similarity == '_most':
     #     with open('./data/torch_tecand_1000bin_te_cand100_sim_least.pkl', 'rb') as fi:
     #         sim_least = pickle.load(fi)
@@ -102,11 +161,11 @@ def compute_rank(model=-1, stop_i=-1):
     label = []
     loss_diff = []
     for i in tqdm(range(len(test_data_list_100))):
-        # if i > 0 and i % 100 == 0:
-        #     print("Average rank %.3f +- %.3f" % (np.mean(rank), np.std(rank)))
-        # if stop_i != -1 and i >= stop_i:
-        #     print("Average rank %.3f +- %.3f" % (np.mean(rank), np.std(rank)))
-        #     return rank, None
+        if i > 0 and i % 100 == 0:
+            print("Average rank %.3f +- %.3f" % (np.mean(rank), np.std(rank)))
+        if stop_i != -1 and i >= stop_i:
+            print("Average rank %.3f +- %.3f" % (np.mean(rank), np.std(rank)))
+            return rank, None
         # try:
         #     pred_out = torch.load("./results/cached_mlp_gnn_pred/%d.pt" % i)
         #     mlp_out = pred_out[0].to(device)
@@ -116,26 +175,46 @@ def compute_rank(model=-1, stop_i=-1):
         test_data = test_data_list_100[i]
         test_data[2][1] = test_data[2][1][:, :num_atom_type]
         test_inchi_key = test_data[0]
-        test_candidate_val = test_candidate_dict_100[test_inchi_key]
-
+        try:
+            test_candidate_val = test_candidate_dict_100[test_inchi_key]
+        except:
+            continue
         test_candidate = convert_candidate_to_data_list(test_data, copy.deepcopy(test_candidate_val))
+        
+        # rank_data_batch = batch_data_list([test_data] + test_candidate) #YZC
+        # rank_data_batch = rank_data_batch.to(device)
 
-        rank_data_batch = batch_data_list([test_data] + test_candidate)
-        rank_data_batch = rank_data_batch.to(device)
+        test_cand_list = [test_data] + test_candidate
+        cand_loader = DataLoader(test_cand_list, batch_size=args.batch_size, shuffle=False, collate_fn=batch_data_list)
 
-        # mlp_out, _, mlp_logits
-        mlp_out, _, _ = mlp_model(rank_data_batch.x, rank_data_batch.edge_index, rank_data_batch.edge_attr,
-                               rank_data_batch.batch,
-                               rank_data_batch.instrument, rank_data_batch.fp, rank_data_batch.shift, return_logits=True)
 
-        # gnn_out, _, gnn_logits
-        gnn_out, _, _ = gnn_model(rank_data_batch.x, rank_data_batch.edge_index, rank_data_batch.edge_attr,
-                               rank_data_batch.batch,
-                               rank_data_batch.instrument, rank_data_batch.fp, rank_data_batch.shift, return_logits=True)
+        by = torch.Tensor().to(device)
 
-        by = rank_data_batch.y
-        pred_out = torch.vstack([mlp_out[None, :, :], gnn_out[None, :, :], rank_data_batch.y[None, :, :]])
-        torch.save(pred_out, ("./results/cached_mlp_gnn_pred/%d.pt" % i))
+        mlp_out = torch.Tensor().to(device)
+        gnn_out = torch.Tensor().to(device)
+
+        for rank_data_batch in cand_loader:
+            rank_data_batch = rank_data_batch.to(device)
+            # print(rank_data_batch)
+
+            # mlp_out, _, mlp_logits
+            mlp_out_curr, _, _ = mlp_model(rank_data_batch.x, rank_data_batch.edge_index, rank_data_batch.edge_attr,
+                                rank_data_batch.batch,
+                                rank_data_batch.instrument, rank_data_batch.fp, rank_data_batch.shift, return_logits=True)
+
+            # gnn_out, _, gnn_logits
+            gnn_out_curr, _, _ = gnn_model(rank_data_batch.x, rank_data_batch.edge_index, rank_data_batch.edge_attr,
+                                rank_data_batch.batch,
+                                rank_data_batch.instrument, rank_data_batch.fp, rank_data_batch.shift, return_logits=True)
+
+            by_curr = rank_data_batch.y
+            # pred_out_curr = torch.vstack([mlp_out[None, :, :], gnn_out[None, :, :], rank_data_batch.y[None, :, :]])
+            # torch.save(pred_out, ("./results/cached_mlp_gnn_pred/%d.pt" % i))
+
+
+            by = torch.cat([by, by_curr])
+            mlp_out = torch.cat([mlp_out, mlp_out_curr])
+            gnn_out = torch.cat([gnn_out, gnn_out_curr])
 
         # ensemble_w = ensemble_model(mlp_logits.detach(), gnn_logits.detach())
         # if ensemble_w[0] < 0.5:
@@ -182,7 +261,7 @@ def compute_rank(model=-1, stop_i=-1):
 
         # if ensemble_w.item() > 0.5:
         #     ensemble_w = torch.ones_like(mlp_out)
-        # else:
+        # else:     
         #     ensemble_w = torch.zeros_like(mlp_out)
 
 
@@ -206,7 +285,9 @@ def compute_rank(model=-1, stop_i=-1):
         #     ensemble_w = torch.ones_like(ensemble_w)
         # else:
         #     ensemble_w = torch.zeros_like(ensemble_w)
-
+        if args.ens_model_file_suffix.startswith("ESP-AVG"):
+            ensemble_w = 0.5
+            
         out = ensemble_w * mlp_out + (1.0 - ensemble_w) * gnn_out
         # out = mlp_out
         # out = gnn_out
@@ -233,7 +314,7 @@ def compute_rank(model=-1, stop_i=-1):
     #          mlp_rank=mlp_rank, gnn_rank=gnn_rank,
     #          mlp_loss=mlp_loss, gnn_loss=gnn_loss)
 
-    return rank, loss_list
+    return rank, loss_list, np.array(gnn_rank), np.array(gnn_loss), np.array(mlp_rank), np.array(mlp_loss)
 
 
 def construct_train_dataset():
@@ -274,8 +355,8 @@ def construct_train_dataset():
         for i in range(len(fl_values)):
             spectra = torch.from_numpy(fl_values[i][4]).to(device)
             spectra = spectra.unsqueeze(0).repeat(len(fl_values), 1)
-            loss_mlp = -F.cosine_similarity(mlp_out, spectra).detach()
-            loss_gnn = -F.cosine_similarity(gnn_out, spectra).detach()
+            loss_mlp = -F.cosine_similarity(mlp_out, spectra).detach().cpu().numpy()
+            loss_gnn = -F.cosine_similarity(gnn_out, spectra).detach().cpu().numpy()
 
             rank_mlp = (loss_mlp[i] > loss_mlp).sum() + 1  # skip itself
             rank_gnn = (loss_gnn[i] > loss_gnn).sum() + 1  # skip itself
@@ -288,7 +369,20 @@ def construct_train_dataset():
             label = 1 if rank_mlp < rank_gnn else 0
             # label = 1 if -loss_mlp[i] - (-loss_gnn[i]) >0 else 0 ## only using target loss
             # weight = 1.0
-            weight = abs(rank_mlp - rank_gnn) / ((rank_mlp + rank_gnn) / 2.0)
+
+            if args.ens_model_file_suffix.startswith("ESP-RU"):
+                label = 1 if rank_mlp < rank_gnn else 0
+                weight = 1
+
+            elif args.ens_model_file_suffix.startswith("ESP-SL"):
+                label = 1 if -loss_mlp[i] - (-loss_gnn[i]) >0 else 0 
+                weight = abs(rank_mlp - rank_gnn) / ((rank_mlp + rank_gnn) / 2.0)
+
+            elif args.ens_model_file_suffix.startswith("ESP"):
+                label = 1 if rank_mlp < rank_gnn else 0
+                weight = abs(rank_mlp - rank_gnn) / ((rank_mlp + rank_gnn) / 2.0)
+            else:
+                raise NotImplementedError("ens_model_file_suffix needs to start with ESP, ESP-RU, or ESP-SL")
 
             constructed_train_data.append([np.expand_dims(fl_values[i][4], 0),
                                            label * np.ones([1, 1]),
@@ -300,8 +394,15 @@ def construct_train_dataset():
     # with open('./data/1000bin_train_model_selector_loss_only.pkl', 'wb') as fo: ## only using target loss
     #     pickle.dump(constructed_train_data, fo, protocol=4)
 
-    with open('./data/1000bin_train_model_selector_with_weight.pkl', 'wb') as fo:
+    # with open('./data/1000bin_train_model_selector_with_weight.pkl', 'wb') as fo:
+    #     pickle.dump(constructed_train_data, fo, protocol=4)
+
+    # with open('./data/ESP-SL_train_data.pkl', 'wb') as fo:
+    # with open('./data/ESP-RU_train_data.pkl', 'wb') as fo:
+    with open('./data/{}_train_data.pkl'.format(args.ens_model_file_suffix), 'wb') as fo:
         pickle.dump(constructed_train_data, fo, protocol=4)
+
+    return constructed_train_data
 
 
 def batch_data_list_fl(data_list, **kwargs):
@@ -316,20 +417,19 @@ def batch_data_list_fl(data_list, **kwargs):
 
     return Batch.from_data_list(graph_list)
 
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # cluster parameters
     parser.add_argument('--cuda', type=int, default=0)
     parser.add_argument('--mlp_model_file_suffix', type=str, default='mlp-lda-corr100-lr54')
     parser.add_argument('--gnn_model_file_suffix', type=str, default='gnn_rs_lda_cr100')
+    parser.add_argument('--ens_model_file_suffix', type=str, default='')
     # training parameters
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--l2norm', type=float, default=0.0)
     parser.add_argument('--drop_ratio', type=float, default=0.3)
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--epochs', type=int, default=100)
     # model parameters
     parser.add_argument('--hidden_dims', type=int, default=1024)
     parser.add_argument('--num_hidden_layers', type=int, default=3)
@@ -351,39 +451,44 @@ if __name__ == '__main__':
 
     parser.add_argument('--train_with_test_ratio', type=float, default=-1)
     parser.add_argument('--train_with_test_ratio_hist_size', type=int, default=-1)
-
+    
+    # Data parameters 
     parser.add_argument('--full_dataset', action='store_true')
+
+    parser.add_argument('--te_cand_dataset_suffix', type=str, default='')
     args = parser.parse_args()
     print(str(args))
+
+    device = torch.device('cuda:' + str(args.cuda) if torch.cuda.is_available() else 'cpu')
     
-    
-    PRETRAIN = True
-    if PRETRAIN:
-        n_ms = 1000
+    with open('./data/union_data_torch_geometric_graph_ontology.pkl', 'rb') as fi:
+        data = pickle.load(fi)
+
+    if args.full_dataset:
+        ## full data set
+        with open('./data/trvate_idx.pkl', 'rb') as fi:
+            split = pickle.load(fi)
+        split = (split[0], split[1], split[2])
     else:
-        with open('./data/union_data_torch_geometric_graph_ontology.pkl', 'rb') as fi:
-            data = pickle.load(fi)
+        ## M+H data set
+        with open('./data/MHfilter_trvate_idx.pkl', 'rb') as fi:
+            split = pickle.load(fi)
 
-        if args.full_dataset:
-            ## full data set
-            with open('./data/trvate_idx.pkl', 'rb') as fi:
-                split = pickle.load(fi)
-            split = (split[0], split[1], split[2])
+        with open("./data/filter_te_idx.pkl", 'rb') as f:
+            filter_te_idx = pickle.load(f)
+        split = (split[0], split[1], filter_te_idx)
+    train_mask, val_mask, test_mask = compute_data_split(len(data), random=False, split=split)
 
-        else:
-            ## M+H data set
-            with open('./data/MHfilter_trvate_idx.pkl', 'rb') as fi:
-                split = pickle.load(fi)
-
-            with open("./data/filter_te_idx.pkl", 'rb') as f:
-                filter_te_idx = pickle.load(f)
-            split = (split[0], split[1], filter_te_idx)
-
-        train_mask, val_mask, test_mask = compute_data_split(len(data), random=False, split=split)
-
+    PRETRAIN = True if args.te_cand_dataset_suffix else False
+    if PRETRAIN:
+        n_ms = 1000 # Number of bins
+    else:
         train_ms = [data[i][4] for i in range(len(data)) if train_mask[i]]
         train_ms = np.vstack(train_ms)
-        lda_topic = compute_lda_feature(train_ms)
+        if args.full_dataset:
+            lda_topic = compute_lda_feature(train_ms, saved_file_path='./data/lda_all_pos')
+        else:
+            lda_topic = compute_lda_feature(train_ms)
 
         train_data = [data[i] for i in range(len(data)) if train_mask[i]]
         val_data = [data[i] for i in range(len(data)) if val_mask[i]]
@@ -392,12 +497,8 @@ if __name__ == '__main__':
         if not args.disable_mt_lda:
             for i in range(len(train_data)):
                 train_data[i].append(lda_topic[i])
-
-    # train_fl_loader = DataLoader(train_data_fl, batch_size=args.batch_size, shuffle=True, collate_fn=batch_data_list_fl)
-
-    device = torch.device('cuda:' + str(args.cuda) if torch.cuda.is_available() else 'cpu')
-
-    n_ms = data[0][4].shape[0]
+        
+        n_ms = data[0][4].shape[0]
 
     mlp_model = MLP_MT(emb_dim=args.hidden_dims, output_dim=n_ms, drop_ratio=args.drop_ratio,
                        disable_mt_lda=args.disable_mt_lda,
@@ -405,7 +506,7 @@ if __name__ == '__main__':
                        mt_lda_weight=args.mt_lda_weight,
                        correlation_mix_residual_weight=args.mlp_correlation_mix_residual_weight).to(device)
     mlp_model.load_state_dict(
-        torch.load('./results/best_model_' + args.mlp_model_file_suffix + '.pt', map_location='cpu'))
+        torch.load('./pretrained_models/best_model_' + args.mlp_model_file_suffix + '.pt', map_location='cpu'))
 
     gnn_model = GNN_graphpred(num_layer=args.num_hidden_layers,
                               emb_dim=args.hidden_dims,
@@ -422,9 +523,8 @@ if __name__ == '__main__':
                               correlation_mix_residual_weight=args.gnn_correlation_mix_residual_weight
                               ).to(device)
     gnn_model.load_state_dict(
-        torch.load('./results/best_model_' + args.gnn_model_file_suffix + '.pt', map_location='cpu'))
+        torch.load('./pretrained_models/best_model_' + args.gnn_model_file_suffix + '.pt', map_location='cpu'))
 
-    # construct_train_dataset()
 
     ensemble_model = torch.nn.Sequential(
             torch.nn.Linear(1000, args.ensemble_hidden_dim),
@@ -442,18 +542,41 @@ if __name__ == '__main__':
     #     drop=args.drop_ratio,
     #     ensemble_hidden_dim=args.ensemble_hidden_dim,
     # ).replace('.', 'sep')
-    ensemble_model_identifier = 'ensemble_model_lr0sep010000_l20sep001000_drop0sep3_epoch19'
+    # ensemble_model_identifier = 'ensemble_model_lr0sep010000_l20sep001000_drop0sep3_epoch19'
+    # ensemble_model_identifier = 'ESP-SL'
 
-    file2write = open('./results/rank_best.txt', 'w')
-    file2write.close()
+    # file2write = open('./results/rank_best.txt', 'w')
+    
+    # YAN ################
+    if not PRETRAIN:
+        try:
+            with open('./data/{}_train_data.pkl'.format(args.ens_model_file_suffix), 'rb') as fi:
+                train_data_fl = pickle.load(fi)
+        except:
+            train_data_fl = construct_train_dataset()
+        
+        val_loader = DataLoader(val_data, batch_size=args.batch_size, shuffle=False, collate_fn=batch_data_list)
+        train_fl_loader = DataLoader(train_data_fl, batch_size=args.batch_size, shuffle=True, collate_fn=batch_data_list_fl)
+        
 
-    test_data_rank, test_data_loss = compute_rank()
-    test_data_rank = np.array(test_data_rank)
-    test_data_loss = np.array(test_data_loss)
+        file2write = open('./results/{}_loss.txt'.format(args.ens_model_file_suffix), 'w')
+        file2write.writelines("epoch \t train_bce_loss \t val_spec_loss\n")
+        train(args.epochs)
+        file2write.close()
+    else:
+        test_data_rank, test_data_loss, gnn_rank, gnn_loss, mlp_rank, mlp_loss = compute_rank()
+        test_data_rank = np.array(test_data_rank)
+        test_data_loss = np.array(test_data_loss)
+
+        np.savez('./results/prediction_' + args.ens_model_file_suffix +'_' +args.te_cand_dataset_suffix, ensemble_rank=test_data_rank, ensemble_loss=test_data_loss,
+                 mlp_rank=mlp_rank, gnn_rank=gnn_rank,
+                 mlp_loss=mlp_loss, gnn_loss=gnn_loss)
+    #################################
+
     # np.savez('./results/prediction_' + ensemble_model_identifier +'.pt', test_data_rank=test_data_rank,
     #          test_data_loss=test_data_loss)
-    np.savez('./results/prediction_loss.pt', test_data_rank=test_data_rank,
-             test_data_loss=test_data_loss)
+    # np.savez('./results/prediction_loss.pt', test_data_rank=test_data_rank,
+    #          test_data_loss=test_data_loss)
 
     print("Average rank %.3f +- %.3f" % (test_data_rank.mean(), test_data_rank.std()))
     for i in range(1, 21):
