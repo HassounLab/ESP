@@ -66,123 +66,144 @@ python data_tecand.py
 #### `train.py`
 This script is used for training and restoring saved GNN and MLP models.
 
-To run the saved GNN model by loading the file `best_model_gnn_e.pt`, use the following command:
+### `ens_train.py`
+This script is used for training and restoring saved ESP models.
+
+To run the saved GNN model on a test set, set `--te_cand_dataset_suffix` to the desired test set and `--model_file_suffix` to the model which you wish to use.
+
+For example, if your test set is `torch_tecand_1000bin_te_cand100` and your pretrained model is `best_model_gnn_pd.pt`, you would use the following command:
 
 ```
-python train.py --cuda 5 --model gnn --model_file_suffix gnn_e --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100
+python train.py --cuda 1 --model gnn --model_file_suffix gnn_pd --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100
 ```
 
-To run the saved MLP model by loading the file `best_model_mlp_e.pt`, use the following command:
+
+To run the saved GNN model on a test set, set `--te_cand_dataset_suffix` to the desired test set and `--model_file_suffix` to the model which you wish to use.
+ 
+For example, if your test set is `torch_tecand_1000bin_te_cand100` and your pretrained model is `best_model_mlp_pd.pt`, you would use the following command:
 
 ```
-python train.py --cuda 5 --model mlp --model_file_suffix mlp_e --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100
+python train.py --cuda 1 --model mlp --model_file_suffix mlp_pd --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100
+```
+
+To run a saved ESP model on a test set, set `--te_cand_dataset_suffix` to the desired test set,  `--ens_model_file_suffix` to the ESP which you wish to use, and `--mlp_model_file_suffix` and ` --gnn_model_file_suffix` to the pretrained MLP and GNN models, respectfully. 
+
+For example, to run `ESP.pt` on `torch_tecand_1000bin_te_cand100` with MLP model `best_model_mlp_pd.pt` and GNN model `best_model_gnn_pd.pt`, use the following command:
+
+```
+python ens_train.py --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --mlp_model_file_suffix mlp_pd --gnn_model_file_suffix gnn_pd --ens_model_file_suffix ESP --cuda 1 --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100
 ```
 
 ### Training new models
-To train a new GNN or MLP model, remember to un-comment train(epoch=args.epochs). This will generate a file with `parameters named best_model_ + args.model_file_suffix + .pt`.
+To train a new GNN or MLP model, set `--te_cand_dataset_suffix` to an empty string or don't call this argument. This will generate a file with parameters named `best_model_' + args.model_file_suffix + '.pt`.
 
 For example, to train a new GNN model, use the following command:
 
 ```
-python train.py --cuda 5 --model gnn --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --model_file_suffix gnn_XX
+python train.py --cuda 1 --model gnn  --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --model_file_suffix gnn_XX
 ```
 
-## Demo below shows results on 100 samples in the test data.
+Before you train a new ESP model, you must have pretrained MLP and GNN models (see above instructions). To train a new ESP model, set `--te_cand_dataset_suffix` to an empty string or don't call this argument. `--ens_model_file_suffix` should start with `ESP`. This will generate a file with parameters named `args.ens_model_file_suffix + '.pt`:
+
+```
+python ens_train.py --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --mlp_model_file_suffix mlp_pd --gnn_model_file_suffix gnn_pd --ens_model_file_suffix ESP --cuda 1
+```
+
+## Demo below shows results of the NIST20 test data with 100 candidates.
 ### To run the pretrained MLP
 
 ```
-python train.py --cuda 5 --model mlp --model_file_suffix mlp_e --disable_two_step_pred --disable_fingerprint --disable
+python train.py --model mlp --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --model_file_suffix mlp_pd --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100 --cuda 1
 ```
 
 ### Expected output
 
 ```
-Namespace(JK='last', batch_size=128, correlation_mat_rank=100, correlation_mix_residual_weight=0.7, cuda=5, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_lda=False, disable_mt_ontology=True, disable_reverse=False, disable_two_step_pred=True, drop_ratio=0.3, epochs=50, full_dataset=False, graph_pooling='mean', hidden_dims=1024, l2norm=0.0, lr=0.0005, model='mlp', model_file_suffix='mlp_e', mt_lda_weight=0.01, num_hidden_layers=3)
-100%|█████████████████████████████████████████| 100/100 [00:05<00:00, 17.97it/s]
-Average rank 6.180 +- 14.371
-Rank at 1 0.560
-Rank at 2 0.710
-Rank at 3 0.760
-Rank at 4 0.770
-Rank at 5 0.790
-Rank at 6 0.810
-Rank at 7 0.820
-Rank at 8 0.830
-Rank at 9 0.860
-Rank at 10 0.870
-Rank at 11 0.870
-Rank at 12 0.880
-Rank at 13 0.900
-Rank at 14 0.910
-Rank at 15 0.920
-Rank at 16 0.920
-Rank at 17 0.920
-Rank at 18 0.920
-Rank at 19 0.920
-Rank at 20 0.920
+Namespace(cuda=1, model_file_suffix='mlp_pd', lr=0.0005, l2norm=0.0, drop_ratio=0.3, batch_size=128, epochs=50, hidden_dims=1024, num_hidden_layers=3, JK='last', graph_pooling='mean', model='mlp', disable_mt_lda=False, correlation_mat_rank=100, mt_lda_weight=0.01, correlation_mix_residual_weight=0.7, disable_two_step_pred=True, disable_reverse=False, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_ontology=True, full_dataset=False, te_cand_dataset_suffix='torch_tecand_1000bin_te_cand100')
+100%|███████████████████████████████████████| 8151/8151 [03:52<00:00, 35.09it/s]
+Average rank 7.269 +- 23.395
+Rank at 1 0.592
+Rank at 2 0.705
+Rank at 3 0.756
+Rank at 4 0.789
+Rank at 5 0.815
+Rank at 6 0.833
+Rank at 7 0.848
+Rank at 8 0.859
+Rank at 9 0.868
+Rank at 10 0.878
+Rank at 11 0.887
+Rank at 12 0.892
+Rank at 13 0.898
+Rank at 14 0.904
+Rank at 15 0.907
+Rank at 16 0.910
+Rank at 17 0.914
+Rank at 18 0.917
+Rank at 19 0.921
+Rank at 20 0.923
 ```
 
 ### To run the pretrained GNN
 ```
-python train.py --model gnn --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --model_file_suffix gnn_e
+python train.py --model gnn --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --model_file_suffix gnn_pd --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100 --cuda 1
 ```
 
 ### Expected output
 ```
-Namespace(JK='last', batch_size=128, correlation_mat_rank=100, correlation_mix_residual_weight=0.7, cuda=0, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_lda=False, disable_mt_ontology=True, disable_reverse=False, disable_two_step_pred=True, drop_ratio=0.3, epochs=50, full_dataset=False, graph_pooling='mean', hidden_dims=1024, l2norm=0.0, lr=0.0005, model='gnn', model_file_suffix='gnn_e', mt_lda_weight=0.01, num_hidden_layers=3)
-100%|█████████████████████████████████████████| 100/100 [01:50<00:00,  1.10s/it]
-Average rank 4.490 +- 8.877
-Rank at 1 0.500
-Rank at 2 0.610
-Rank at 3 0.670
-Rank at 4 0.730
-Rank at 5 0.750
-Rank at 6 0.790
-Rank at 7 0.860
-Rank at 8 0.900
-Rank at 9 0.930
-Rank at 10 0.950
-Rank at 11 0.950
-Rank at 12 0.950
-Rank at 13 0.950
-Rank at 14 0.970
-Rank at 15 0.970
-Rank at 16 0.970
-Rank at 17 0.970
-Rank at 18 0.970
-Rank at 19 0.970
-Rank at 20 0.970
+Namespace(cuda=1, model_file_suffix='gnn_pd', lr=0.0005, l2norm=0.0, drop_ratio=0.3, batch_size=128, epochs=50, hidden_dims=1024, num_hidden_layers=3, JK='last', graph_pooling='mean', model='gnn', disable_mt_lda=False, correlation_mat_rank=100, mt_lda_weight=0.01, correlation_mix_residual_weight=0.7, disable_two_step_pred=True, disable_reverse=False, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_ontology=True, full_dataset=False, te_cand_dataset_suffix='torch_tecand_1000bin_te_cand100')
+100%|███████████████████████████████████████| 8151/8151 [05:09<00:00, 26.35it/s]
+Average rank 7.819 +- 25.453
+Rank at 1 0.506
+Rank at 2 0.652
+Rank at 3 0.729
+Rank at 4 0.767
+Rank at 5 0.793
+Rank at 6 0.815
+Rank at 7 0.834
+Rank at 8 0.848
+Rank at 9 0.861
+Rank at 10 0.871
+Rank at 11 0.881
+Rank at 12 0.888
+Rank at 13 0.896
+Rank at 14 0.901
+Rank at 15 0.907
+Rank at 16 0.910
+Rank at 17 0.914
+Rank at 18 0.919
+Rank at 19 0.921
+Rank at 20 0.924
 ```
 
 ### To run the pretrained ESP
-python ens_train.py --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --mlp_model_file_suffix mlp_e --gnn_model_file_suffix gnn_e
+python ens_train.py --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --mlp_model_file_suffix mlp_pd --gnn_model_file_suffix gnn_pd --ens_model_file_suffix ESP --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100
 
 ### Expected output
 ```
-Namespace(JK='last', batch_size=128, correlation_mat_rank=100, cuda=0, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_lda=False, disable_mt_ontology=True, disable_reverse=False, disable_two_step_pred=True, drop_ratio=0.3, ensemble_hidden_dim=256, epochs=50, full_dataset=False, gnn_correlation_mix_residual_weight=0.7, gnn_model_file_suffix='gnn_e', graph_pooling='mean', hidden_dims=1024, l2norm=0.0, lr=0.001, mlp_correlation_mix_residual_weight=0.8, mlp_model_file_suffix='mlp_e', mt_lda_weight=0.01, num_hidden_layers=3, train_with_test_ratio=-1, train_with_test_ratio_hist_size=-1)
-cpu
-100%|█████████████████████████████████████████| 100/100 [01:49<00:00,  1.10s/it]
-Average rank 3.740 +- 6.435
-Rank at 1 0.520
-Rank at 2 0.630
-Rank at 3 0.700
-Rank at 4 0.820
-Rank at 5 0.860
-Rank at 6 0.910
-Rank at 7 0.910
-Rank at 8 0.930
-Rank at 9 0.950
-Rank at 10 0.950
-Rank at 11 0.950
-Rank at 12 0.950
-Rank at 13 0.950
-Rank at 14 0.950
-Rank at 15 0.950
-Rank at 16 0.950
-Rank at 17 0.950
-Rank at 18 0.950
-Rank at 19 0.960
-Rank at 20 0.960
+Namespace(cuda=0, mlp_model_file_suffix='mlp_pd', gnn_model_file_suffix='gnn_pd', ens_model_file_suffix='ESP', lr=0.001, l2norm=0.0, drop_ratio=0.3, batch_size=128, epochs=100, hidden_dims=1024, num_hidden_layers=3, JK='last', graph_pooling='mean', disable_mt_lda=False, correlation_mat_rank=100, ensemble_hidden_dim=256, mt_lda_weight=0.01, mlp_correlation_mix_residual_weight=0.8, gnn_correlation_mix_residual_weight=0.7, disable_two_step_pred=True, disable_reverse=False, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_ontology=True, train_with_test_ratio=-1, train_with_test_ratio_hist_size=-1, full_dataset=False, te_cand_dataset_suffix='torch_tecand_1000bin_te_cand100')
+100%|███████████████████████████████████████| 8151/8151 [05:48<00:00, 23.38it/s]
+Average rank 5.501 +- 19.434
+Rank at 1 0.620
+Rank at 2 0.745
+Rank at 3 0.799
+Rank at 4 0.832
+Rank at 5 0.854
+Rank at 6 0.870
+Rank at 7 0.882
+Rank at 8 0.892
+Rank at 9 0.904
+Rank at 10 0.912
+Rank at 11 0.916
+Rank at 12 0.921
+Rank at 13 0.925
+Rank at 14 0.929
+Rank at 15 0.932
+Rank at 16 0.936
+Rank at 17 0.939
+Rank at 18 0.941
+Rank at 19 0.944
+Rank at 20 0.947
 ```
 
 #### References
