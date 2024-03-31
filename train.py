@@ -11,8 +11,8 @@ from mlp_mt import MLP_MT
 from utils import compute_data_split, batch_data_list, convert_candidate_to_data_list, compute_lda_feature
 num_atom_type = 27
 
-
 def train(epoch):
+    best_val_cosine = 0
     model.train()
 
     for epoch_i in tqdm(range(epoch)):
@@ -36,12 +36,18 @@ def train(epoch):
             train_cosine.append(-loss_cosine.item())
 
         val_cosine = eval(model, val_loader)
-        print("epoch %d, train loss %.2f, train cosine %.2f, eval cosine similarity %.2f" % (
-            epoch_i + 1, np.mean(train_loss), np.mean(train_cosine), val_cosine)
-              )
 
-        torch.save(model.state_dict(), './results/best_model_' + args.model_file_suffix + '.pt')
+        loss2file(epoch_i, np.mean(train_loss), val_cosine)
+        # print("epoch %d, train loss %.2f, train cosine %.2f, eval cosine similarity %.2f" % (
+        #     epoch_i + 1, np.mean(train_loss), np.mean(train_cosine), val_cosine)
+        #       )
+        if val_cosine > best_val_cosine:
+            torch.save(model.state_dict(), './pretrained_models/best_model_' + args.model_file_suffix + '.pt')
+            best_val_cosine = val_cosine
 
+def loss2file(i_epoch, train_loss, val_loss):
+    file2write.writelines("%d \t %.4f \t %.4f\n"%(i_epoch, train_loss, val_loss))
+    file2write.flush()
 
 @torch.no_grad()
 def eval(model, loader):
@@ -65,46 +71,64 @@ def eval(model, loader):
 
 @torch.no_grad()
 def compute_rank(model, stop_i=-1):
-    model.load_state_dict(torch.load('./results/best_model_' + args.model_file_suffix + '.pt', map_location='cpu'))
+    # model.load_state_dict(torch.load('./results/best_model_' + args.model_file_suffix + '.pt', map_location='cpu'))
+    model.load_state_dict(torch.load('./pretrained_models/best_model_' + args.model_file_suffix + '.pt', map_location='cpu')) #YZC
 
     is_train = model.training
 
     model.eval()
     test_data_list = [data[i] for i in range(len(data)) if test_mask[i]]
+    print(len(test_data_list))
 
-    with open('./data/torch_tecand_1000bin_te_cand100.pkl', 'rb') as fi:
+    with open('./data/'+ args.te_cand_dataset_suffix + '.pkl', 'rb') as fi:
         test_candidate_dict = pickle.load(fi)
 
     rank = []
     loss_list = []
     for i in tqdm(range(len(test_data_list))):
+
         if i > 0 and i % 100 == 0:
             print("Average rank %.3f +- %.3f" % (np.mean(rank), np.std(rank)))
         if stop_i != -1 and i >= stop_i:
             print("Average rank %.3f +- %.3f" % (np.mean(rank), np.std(rank)))
             return rank
+        
         test_data = test_data_list[i]
         test_data[2][1] = test_data[2][1][:, :num_atom_type]
         test_inchi_key = test_data[0]
-        test_candidate_val = test_candidate_dict[test_inchi_key]
+        try:
+            test_candidate_val = test_candidate_dict[test_inchi_key]
+        except:
+            continue
 
         test_candidate = convert_candidate_to_data_list(test_data, copy.deepcopy(test_candidate_val))
 
-        rank_data_batch = batch_data_list([test_data] + test_candidate)
-        rank_data_batch = rank_data_batch.to(device)
+        test_cand_list = [test_data] + test_candidate
 
-        out, _ = model(rank_data_batch.x, rank_data_batch.edge_index, rank_data_batch.edge_attr, rank_data_batch.batch,
+        #AK
+        #rank_data_batch = batch_data_list([test_data] + test_candidate)
+        #rank_data_batch = rank_data_batch.to(device)
+        cand_loader = DataLoader(test_cand_list, batch_size=args.batch_size, shuffle=False, collate_fn=batch_data_list)
+        out = torch.Tensor()
+        total_y = torch.Tensor()
+
+        for rank_data_batch in cand_loader:
+            rank_data_batch = rank_data_batch.to(device)
+            out_batch, _ = model(rank_data_batch.x, rank_data_batch.edge_index, rank_data_batch.edge_attr, rank_data_batch.batch,
                     rank_data_batch.instrument, rank_data_batch.fp, rank_data_batch.shift)
-        loss = -F.cosine_similarity(out, rank_data_batch.y)
+            out = torch.cat([out, out_batch.cpu()])
+            total_y = torch.cat([total_y, rank_data_batch.y.cpu()])
+
+        loss = -F.cosine_similarity(out, total_y)
         loss = loss.cpu().numpy()
         test_rank = (loss[0] > loss[2:]).sum() + 1  # skip itself
 
         rank.append(test_rank)
         loss_list.append(loss[0])
 
-    with open('./ranks.csv', 'w') as f:
-        for i in range(len(rank)):
-            f.write(str(rank[i])+',')
+    # with open('./results/ranks_2.csv', 'w') as f:
+    #     for i in range(len(rank)):
+    #         f.write(str(rank[i])+',')
 
     if is_train:
         model.train()
@@ -143,18 +167,22 @@ if __name__ == '__main__':
     parser.add_argument('--disable_mt_ontology', action='store_true')
     parser.add_argument('--full_dataset', action='store_true')
 
+    parser.add_argument('--te_cand_dataset_suffix', type=str, default='')
+
     args = parser.parse_args()
     print(str(args))
     with open('./data/torch_trvate_1000bin.pkl', 'rb') as fi:
         data = pickle.load(fi)
 
     if args.full_dataset:
+        print("Full dataset")
         with open('./data/trvate_idx.pkl', 'rb') as fi:
             split = pickle.load(fi)
         split = (split[0], split[1], split[2])
 
     else:
         # M+H data set (default)
+        print("M+H dataset")
         with open('./data/MHfilter_trvate_idx.pkl', 'rb') as fi:
             split = pickle.load(fi)
         with open("./data/filter_te_idx.pkl", 'rb') as f:
@@ -165,13 +193,16 @@ if __name__ == '__main__':
 
     train_ms = [data[i][4] for i in range(len(data)) if train_mask[i]]
     train_ms = np.vstack(train_ms)
-    lda_topic = compute_lda_feature(train_ms)
 
     train_data = [data[i] for i in range(len(data)) if train_mask[i]]
     val_data = [data[i] for i in range(len(data)) if val_mask[i]]
 
     # append lda feature
     if not args.disable_mt_lda:
+        if args.full_dataset:
+            lda_topic = compute_lda_feature(train_ms, saved_file_path='./data/lda_all_pos')
+        else:
+            lda_topic = compute_lda_feature(train_ms)
         for i in range(len(train_data)):
             train_data[i].append(lda_topic[i])
 
@@ -208,12 +239,19 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2norm)
 
-    # train(epoch=args.epochs)
+    if len(args.te_cand_dataset_suffix) < 1:
+        file2write = open('./results/{}_loss.txt'.format(args.model_file_suffix), 'w')
+        file2write.writelines("epoch \t train_bce_loss \t val_spec_loss\n")
+        train(args.epochs)
+        file2write.close()
+    else:
+        # test
+        test_data_rank, test_data_loss = compute_rank(model)
+        test_data_rank = np.array(test_data_rank)
+        test_data_loss = np.array(test_data_loss)
+        # np.savez('./results/prediction_' + args.model_file_suffix, test_data_rank=test_data_rank, test_data_loss=test_data_loss)
 
-    test_data_rank, test_data_loss = compute_rank(model)
-    test_data_rank = np.array(test_data_rank)
-    test_data_loss = np.array(test_data_loss)
-    np.savez('./results/prediction_' + args.model_file_suffix, test_data_rank=test_data_rank, test_data_loss=test_data_loss)
+        np.savez('./results/prediction_' + args.model_file_suffix + "_" + args.te_cand_dataset_suffix, test_data_rank=test_data_rank, test_data_loss=test_data_loss)
 
     print("Average rank %.3f +- %.3f" % (test_data_rank.mean(), test_data_rank.std()))
     for i in range(1, 21):
