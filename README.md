@@ -45,7 +45,15 @@ conda env create -f env_d.yml
 
 ### Data download
 
-Two files under data/final_5 are too large to be part of this git repository. These are mol_dict.pkl and pos_train.csv. These datasets are kept on zonodo.org and the path is given in the files of the same name under data/final_5. Please download these files and replace the files in the git repository with the downloaded files. pos_train.csv is the CANOPUS dataset in csv format. mol_dict.pkl is a dictionary mapping InChiKeys to rdkit mol objects. You can also create mol_dict.pkl yourself if so required.
+Two files under data/final_5 are too large to be part of this git repository. These are mol_dict.pkl and pos_train.csv. These datasets are kept on zonodo.org and the path is given in the files of the same name under data/final_5. You can use the following commands to download these files:
+
+cd data/final_5
+wget https://zenodo.org/records/10929401/files/pos_train.csv
+
+wget https://zenodo.org/records/10929354/files/mol_dict.pkl
+
+
+pos_train.csv is the CANOPUS dataset in csv format. mol_dict.pkl is a dictionary mapping InChiKeys to rdkit mol objects. You can also create mol_dict.pkl yourself if so required.
 
 ### Data Preparation
 
@@ -70,8 +78,8 @@ python data_tecand.py
 #### `train.py`
 This script is used for training and restoring saved GNN and MLP models.
 
-#### `ens_train_realistic.py`
-This script is used for training and restoring saved ESP models.
+#### `ens_train_canopus.py`
+This script is used for training and restoring saved ESP models on CANOPUS dataset.
 
 To run the saved GNN model on a test set, set `--te_cand_dataset_suffix` to the desired test set and `--model_file_suffix` to the model which you wish to use.
 
@@ -95,7 +103,7 @@ To run a saved ESP model on a test set, set `--te_cand_dataset_suffix` to the de
 For example, to run `ESP.pt` on `torch_tecand_1000bin_te_cand100` with MLP model `best_model_mlp_pd.pt` and GNN model `best_model_gnn_pd.pt`, use the following command:
 
 ```
-python ens_train.py --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --mlp_model_file_suffix mlp_pd --gnn_model_file_suffix gnn_pd --ens_model_file_suffix ESP --cuda 1 --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100
+python ens_train_canopus.py --cuda 0 --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology   --correlation_mat_rank 100  --full_dataset --mode 'canopus'
 ```
 
 ### Training new models
@@ -110,10 +118,10 @@ python train.py --cuda 1 --model gnn  --disable_two_step_pred --disable_fingerpr
 Before you train a new ESP model, you must have pretrained MLP and GNN models (see above instructions). To train a new ESP model, set `--te_cand_dataset_suffix` to an empty string or don't call this argument. `--ens_model_file_suffix` should start with `ESP`. This will generate a file with parameters named `args.ens_model_file_suffix + '.pt`:
 
 ```
-python ens_train.py --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --mlp_model_file_suffix mlp_pd --gnn_model_file_suffix gnn_pd --ens_model_file_suffix ESP --cuda 1
+python ens_train_canopus.py --cuda 0 --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology   --correlation_mat_rank 100  --full_dataset --mode 'canopus'
 ```
 
-## Demo below shows results of the NIST20 test data with 100 candidates.
+## Demo below shows results of the CANOPUS test data with all downloaded candidates.
 ### To run the pretrained MLP
 
 ```
