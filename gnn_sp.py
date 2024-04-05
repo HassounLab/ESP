@@ -258,8 +258,9 @@ class GNN(torch.nn.Module):
         x, edge_index, edge_attr, instrument, fp = argv[0], argv[1], argv[2], argv[3], argv[4]
 
         x1 = self.x_embedding1(x[:, :num_atom_type])
-        x2 = self.x_embedding2(instrument)
-        x = x1 + x2
+        #x2 = self.x_embedding2(instrument)
+        #x = x1 + x2
+        x = x1 #Canopus has no instrument conditions
 
         h_list = [x]
         for layer in range(self.num_layer):

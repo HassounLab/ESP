@@ -126,9 +126,9 @@ def compute_rank(model, stop_i=-1):
         rank.append(test_rank)
         loss_list.append(loss[0])
 
-    # with open('./results/ranks_2.csv', 'w') as f:
-    #     for i in range(len(rank)):
-    #         f.write(str(rank[i])+',')
+    with open('./results/ranks.csv', 'w') as f:
+        for i in range(len(rank)):
+            f.write(str(rank[i])+',')
 
     if is_train:
         model.train()

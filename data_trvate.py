@@ -79,12 +79,12 @@ def get_ms_setting(precursor_type, ce, prec_pool):
 
 
 def get_intensity_(x):
-    return x.split(' ', 2)[0:2]
+    return list(map(float, x.split(' ', 2)[0:2]))
 
 
 def get_intensity(x):
     x_list = list(map(get_intensity_, x.split('\n')[:-1]))
-    return np.array(x_list, dtype = np.float)
+    return np.array(x_list, dtype = float)
 
 
 def get_ms_array(x, transformation, max_mz, resolution):
