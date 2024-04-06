@@ -150,7 +150,7 @@ def load_transform_rank_data(data_g):
         pickle.dump(data_g, fp, protocol=4)
 
 
-def df2list_cand(df, trans, max_mz, resolution, cand, inchi_ik_dict, split='random'):
+def df2list_cand(mol_dict, df, trans, max_mz, resolution, cand, inchi_ik_dict, split='random'):
     data_list = list()
     cand_mask = list()
     inchi_list = list()
@@ -176,7 +176,8 @@ def df2list_cand(df, trans, max_mz, resolution, cand, inchi_ik_dict, split='rand
         t_data_list = []
 
         for inchi in cand[t_IK]:
-            m = Chem.MolFromInchi(inchi)
+            #m = Chem.MolFromInchi(inchi)
+            m = mol_dict[inchi]
             fp = np.array([int(x) for x in AllChem.GetMorganFingerprintAsBitVect(m, radius=2, nBits=hp['fp_size']).ToBitString()])
             g = chemutils.mol_to_bigraph(m,
                 node_featurizer=get_atom_featurizer(atom_feature, ele_list),
@@ -191,7 +192,7 @@ def df2list_cand(df, trans, max_mz, resolution, cand, inchi_ik_dict, split='rand
     return dist_data_dict
 
 
-def create_test_cand_dataset(mode, data, precs, atom_feat, bond_feat, ms_transformation, max_mz, resolution, instrument_on_node, self_loop, num_virtual_nodes, element_list, inchi_ik_dict, fp_size,
+def create_test_cand_dataset(mol_dict, mode, data, precs, atom_feat, bond_feat, ms_transformation, max_mz, resolution, instrument_on_node, self_loop, num_virtual_nodes, element_list, inchi_ik_dict, fp_size,
                              noise, split="random"):
     pos_prec, neg_prec = precs
     if mode == 'positive':
@@ -206,14 +207,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     pos_test = pd.read_csv(os.path.join(data_dir_prefix + 'data', hp['data_dir'], "pos_test.csv"))
-    neg_test = pd.read_csv(os.path.join(data_dir_prefix + 'data', hp['data_dir'], "neg_test.csv"))
+    #neg_test = pd.read_csv(os.path.join(data_dir_prefix + 'data', hp['data_dir'], "neg_test.csv"))
+    neg_test = []
+    with open(os.path.join(data_dir_prefix+'data', hp['data_dir'], "mol_dict.pkl"), 'rb') as f:
+        mol_dict = pickle.load(f)
 
-    # inchi_ik_dict len 27,254
-    with open(data_dir_prefix + 'data/test_inchi_ik_dict.pkl', 'rb') as f:
-        inchi_ik_dict = pickle.load(f)
+    # inchi_ik_dict len 27,254. Not needed for Canopus
+    #with open(data_dir_prefix + 'data/test_inchi_ik_dict.pkl', 'rb') as f:
+        #inchi_ik_dict = pickle.load(f)
 
-    ### 100, 250, 1000
-    with open(data_dir_prefix + 'data/test_cand/' + str(hp['cand_size']) + '.pkl', 'rb') as f:
+    ### 100, 250, 1000. For NIST
+    #with open(data_dir_prefix + 'data/test_cand/' + str(hp['cand_size']) + '.pkl', 'rb') as f:
+        #cand_list = pickle.load(f)
+
+    #For Canopus
+    with open(data_dir_prefix + 'data/test_cand/cand_dict_large.pkl', 'rb') as f: #AK
         cand_list = pickle.load(f)
 
     if str(hp['cand_size'])=='full':
@@ -224,7 +232,7 @@ if __name__ == "__main__":
 
     cand, pos_test, neg_test = (cand, pos_test, neg_test)
 
-    dist_data_dict = create_test_cand_dataset(hp['mode'], (cand, pos_test, neg_test), (hp['pos_prec'], hp['neg_prec']),
+    dist_data_dict = create_test_cand_dataset(mol_dict, hp['mode'], (cand, pos_test, neg_test), (hp['pos_prec'], hp['neg_prec']),
                                                                                 hp['atom_feature'], hp['bond_feature'], hp['ms_transformation'], hp['max_mz'],
                                                                                 hp['resolution'],hp['instrument_on_node'],
                                                                                 hp['self_loop'],hp['num_virtual_nodes'],hp['element_list'],

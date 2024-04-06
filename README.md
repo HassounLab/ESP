@@ -5,7 +5,7 @@
 
 A key challenge in metabolomics is annotating spectra measured from a biological sample with chemical identities. We improve on prior neural network-based annotation approaches, namely MLP-based [1] and GNN-based [2] approaches. We propose a novel ensemble model to take advantage of both MLP and GNN models. First, the MLP and GNN are enhanced by: 1) multi-tasking on additional data (spectral topic labels obtained using LDA (Latent Dirichlet Allocation) [3], and 2) attention mechanism to capture dependencies among spectra peaks. Next, we create an Ensembled Spectral Prediction (ESP) model that is trained on ranking tasks to generate the average weighted MLP and GNN spectral predictions. Our results, measured in average rank and Rank@K for the test spectra, show remarkable performance gain over existing neural network approaches.
 
-As our aim is to fundamentally evaluate deep learning models, we created two baseline methods that can be easily implemented and replicated (with our code, or others) to do comparisons: the MLP and GNN models, per Equations 1-10.  We have shown improvements with ESP over the MLP model (implementation of NEIMS model (Wei et al., 2019) with a generalized dataset ESI/LC-MS but not EI/GC-MS data in NEIMS), in terms of a 23.7% increase in average rank performance on the full NIST candidate set. We also show 37.2% improvement in average rank over the baseline GNN model, initially presented by our group (Hao et al., 2020), which was the first to use GNNs in mass spectra annotation. The MLP and GNN are the simplest possible baseline models for comparing ML techniques - they are easily implemented and suited for re-training and evaluation when comparing to other techniques and other datasets.
+As our aim is to fundamentally evaluate deep learning models, we created two baseline methods that can be easily implemented and replicated (with our code, or others) to do comparisons: the MLP and GNN models, per Equations 1-10.  We have shown improvements with ESP over the MLP model (implementation of NEIMS model (Wei et al., 2019) with a generalized dataset ESI/LC-MS but not EI/GC-MS data in NEIMS), in terms of a 23.7% increase in average rank performance on the full NIST candidate set. We also show 37.2% improvement in average rank over the baseline GNN model, initially presented by our group (Hao et al., 2020), which was the first to use GNNs in mass spectra annotation. The MLP and GNN are the simplest possible baseline models for comparing ML techniques - they are easily implemented and suited for re-training and evaluation when comparing to other techniques and other datasets. The published model and published datasets are for CANOPUS data.
 
 In accordance with NIST license regulations, we are unable to publish the NIST-20 data alongside our models trained on NIST-20. Models pretrained on CANOPUS are located in /pretrained_models. CANOPUS dataset can be accessed from https://github.com/samgoldman97/mist.
 
@@ -43,6 +43,18 @@ conda env create -f env_d.yml
 
 ## Usage
 
+### Data download
+
+Two files under data/final_5 are too large to be part of this git repository. These are mol_dict.pkl and pos_train.csv. These datasets are kept on zonodo.org and the path is given in the files of the same name under data/final_5. You can use the following commands to download these files:
+
+cd data/final_5
+wget https://zenodo.org/records/10929401/files/pos_train.csv
+
+wget https://zenodo.org/records/10929354/files/mol_dict.pkl
+
+
+pos_train.csv is the CANOPUS dataset in csv format. mol_dict.pkl is a dictionary mapping InChiKeys to rdkit mol objects. You can also create mol_dict.pkl yourself if so required.
+
 ### Data Preparation
 
 #### `data_trvate.py`
@@ -66,8 +78,8 @@ python data_tecand.py
 #### `train.py`
 This script is used for training and restoring saved GNN and MLP models.
 
-#### `ens_train.py`
-This script is used for training and restoring saved ESP models.
+#### `ens_train_canopus.py`
+This script is used for training and restoring saved ESP models on CANOPUS dataset.
 
 To run the saved GNN model on a test set, set `--te_cand_dataset_suffix` to the desired test set and `--model_file_suffix` to the model which you wish to use.
 
@@ -91,7 +103,7 @@ To run a saved ESP model on a test set, set `--te_cand_dataset_suffix` to the de
 For example, to run `ESP.pt` on `torch_tecand_1000bin_te_cand100` with MLP model `best_model_mlp_pd.pt` and GNN model `best_model_gnn_pd.pt`, use the following command:
 
 ```
-python ens_train.py --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --mlp_model_file_suffix mlp_pd --gnn_model_file_suffix gnn_pd --ens_model_file_suffix ESP --cuda 1 --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100
+python ens_train_canopus.py --cuda 0 --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology   --correlation_mat_rank 100  --full_dataset --mode 'canopus'
 ```
 
 ### Training new models
@@ -106,104 +118,107 @@ python train.py --cuda 1 --model gnn  --disable_two_step_pred --disable_fingerpr
 Before you train a new ESP model, you must have pretrained MLP and GNN models (see above instructions). To train a new ESP model, set `--te_cand_dataset_suffix` to an empty string or don't call this argument. `--ens_model_file_suffix` should start with `ESP`. This will generate a file with parameters named `args.ens_model_file_suffix + '.pt`:
 
 ```
-python ens_train.py --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --mlp_model_file_suffix mlp_pd --gnn_model_file_suffix gnn_pd --ens_model_file_suffix ESP --cuda 1
+python ens_train_canopus.py --cuda 0 --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology   --correlation_mat_rank 100  --full_dataset --mode 'canopus'
 ```
 
-## Demo below shows results of the NIST20 test data with 100 candidates.
+## Demo below shows results of the CANOPUS test data with all downloaded candidates.
 ### To run the pretrained MLP
 
 ```
-python train.py --model mlp --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --model_file_suffix mlp_pd --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100 --cuda 1
+python train.py --cuda 0 --model gnn --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --disable_mt_ontology  --correlation_mat_rank 100 --model_file_suffix gnn_can --full_dataset
 ```
 
 ### Expected output
 
 ```
-Namespace(cuda=1, model_file_suffix='mlp_pd', lr=0.0005, l2norm=0.0, drop_ratio=0.3, batch_size=128, epochs=50, hidden_dims=1024, num_hidden_layers=3, JK='last', graph_pooling='mean', model='mlp', disable_mt_lda=False, correlation_mat_rank=100, mt_lda_weight=0.01, correlation_mix_residual_weight=0.7, disable_two_step_pred=True, disable_reverse=False, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_ontology=True, full_dataset=False, te_cand_dataset_suffix='torch_tecand_1000bin_te_cand100')
-100%|███████████████████████████████████████| 8151/8151 [03:52<00:00, 35.09it/s]
-Average rank 7.269 +- 23.395
-Rank at 1 0.592
-Rank at 2 0.705
-Rank at 3 0.756
-Rank at 4 0.789
-Rank at 5 0.815
-Rank at 6 0.833
-Rank at 7 0.848
-Rank at 8 0.859
-Rank at 9 0.868
-Rank at 10 0.878
-Rank at 11 0.887
-Rank at 12 0.892
-Rank at 13 0.898
-Rank at 14 0.904
-Rank at 15 0.907
-Rank at 16 0.910
-Rank at 17 0.914
-Rank at 18 0.917
-Rank at 19 0.921
-Rank at 20 0.923
+Namespace(cuda=0, model_file_suffix='mlp_can', lr=0.0005, l2norm=0.0, drop_ratio=0.3, batch_size=128, epochs=50, hidden_dims=1024, num_hidden_layers=3, JK='last', graph_pooling='mean', model='mlp', disable_mt_lda=False, correlation_mat_rank=100, mt_lda_weight=0.01, correlation_mix_residual_weight=0.7, disable_two_step_pred=True, disable_reverse=False, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_ontology=True, full_dataset=True)
+
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 819/819 [09:14<00:00,  1.48it/s]
+Average rank 339.350 +- 1264.715
+Rank at 1 0.230
+Rank at 2 0.310
+Rank at 3 0.374
+Rank at 4 0.413
+Rank at 5 0.436
+Rank at 6 0.459
+Rank at 7 0.474
+Rank at 8 0.493
+Rank at 9 0.509
+Rank at 10 0.520
+Rank at 11 0.534
+Rank at 12 0.540
+Rank at 13 0.560
+Rank at 14 0.569
+Rank at 15 0.571
+Rank at 16 0.584
+Rank at 17 0.586
+Rank at 18 0.590
+Rank at 19 0.601
+Rank at 20 0.609
+
 ```
 
 ### To run the pretrained GNN
 ```
-python train.py --model gnn --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --model_file_suffix gnn_pd --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100 --cuda 1
+ python train.py --cuda 0 --model gnn --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --disable_mt_ontology  --correlation_mat_rank 100 --model_file_suffix gnn_can --full_dataset
 ```
 
 ### Expected output
 ```
-Namespace(cuda=1, model_file_suffix='gnn_pd', lr=0.0005, l2norm=0.0, drop_ratio=0.3, batch_size=128, epochs=50, hidden_dims=1024, num_hidden_layers=3, JK='last', graph_pooling='mean', model='gnn', disable_mt_lda=False, correlation_mat_rank=100, mt_lda_weight=0.01, correlation_mix_residual_weight=0.7, disable_two_step_pred=True, disable_reverse=False, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_ontology=True, full_dataset=False, te_cand_dataset_suffix='torch_tecand_1000bin_te_cand100')
-100%|███████████████████████████████████████| 8151/8151 [05:09<00:00, 26.35it/s]
-Average rank 7.819 +- 25.453
-Rank at 1 0.506
-Rank at 2 0.652
-Rank at 3 0.729
-Rank at 4 0.767
-Rank at 5 0.793
-Rank at 6 0.815
-Rank at 7 0.834
-Rank at 8 0.848
-Rank at 9 0.861
-Rank at 10 0.871
-Rank at 11 0.881
-Rank at 12 0.888
-Rank at 13 0.896
-Rank at 14 0.901
-Rank at 15 0.907
-Rank at 16 0.910
-Rank at 17 0.914
-Rank at 18 0.919
-Rank at 19 0.921
-Rank at 20 0.924
+Namespace(cuda=0, model_file_suffix='gnn_can', lr=0.0005, l2norm=0.0, drop_ratio=0.3, batch_size=128, epochs=50, hidden_dims=1024, num_hidden_layers=3, JK='last', graph_pooling='mean', model='gnn', disable_mt_lda=False, correlation_mat_rank=100, mt_lda_weight=0.01, correlation_mix_residual_weight=0.7, disable_two_step_pred=True, disable_reverse=False, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_ontology=True, full_dataset=True)
+Average rank 241.753 +- 939.827
+Rank at 1 0.115
+Rank at 2 0.209
+Rank at 3 0.265
+Rank at 4 0.308
+Rank at 5 0.332
+Rank at 6 0.369
+Rank at 7 0.400
+Rank at 8 0.421
+Rank at 9 0.443
+Rank at 10 0.464
+Rank at 11 0.479
+Rank at 12 0.490
+Rank at 13 0.507
+Rank at 14 0.519
+Rank at 15 0.527
+Rank at 16 0.536
+Rank at 17 0.545
+Rank at 18 0.551
+Rank at 19 0.565
+Rank at 20 0.573
+
 ```
 
 ### To run the pretrained ESP
-python ens_train.py --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology --correlation_mat_rank 100 --mlp_model_file_suffix mlp_pd --gnn_model_file_suffix gnn_pd --ens_model_file_suffix ESP --te_cand_dataset_suffix torch_tecand_1000bin_te_cand100
+python ens_train_canopus.py --cuda 0 --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology   --correlation_mat_rank 100  --full_dataset --mode 'canopus'
 
 ### Expected output
 ```
-Namespace(cuda=0, mlp_model_file_suffix='mlp_pd', gnn_model_file_suffix='gnn_pd', ens_model_file_suffix='ESP', lr=0.001, l2norm=0.0, drop_ratio=0.3, batch_size=128, epochs=100, hidden_dims=1024, num_hidden_layers=3, JK='last', graph_pooling='mean', disable_mt_lda=False, correlation_mat_rank=100, ensemble_hidden_dim=256, mt_lda_weight=0.01, mlp_correlation_mix_residual_weight=0.8, gnn_correlation_mix_residual_weight=0.7, disable_two_step_pred=True, disable_reverse=False, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_ontology=True, train_with_test_ratio=-1, train_with_test_ratio_hist_size=-1, full_dataset=False, te_cand_dataset_suffix='torch_tecand_1000bin_te_cand100')
-100%|███████████████████████████████████████| 8151/8151 [05:48<00:00, 23.38it/s]
-Average rank 5.501 +- 19.434
-Rank at 1 0.620
-Rank at 2 0.745
-Rank at 3 0.799
-Rank at 4 0.832
-Rank at 5 0.854
-Rank at 6 0.870
-Rank at 7 0.882
-Rank at 8 0.892
-Rank at 9 0.904
-Rank at 10 0.912
-Rank at 11 0.916
-Rank at 12 0.921
-Rank at 13 0.925
-Rank at 14 0.929
-Rank at 15 0.932
-Rank at 16 0.936
-Rank at 17 0.939
-Rank at 18 0.941
-Rank at 19 0.944
-Rank at 20 0.947
+Namespace(cuda=0, mlp_model_file_suffix='mlp_fp', gnn_model_file_suffix='gnn_fp', ens_model_file_suffix='ens_fp', lr=0.001, l2norm=0.0, drop_ratio=0.3, batch_size=128, epochs=100, bins=1000, mode='canopus', hidden_dims=1024, num_hidden_layers=3, JK='last', graph_pooling='mean', disable_mt_lda=False, correlation_mat_rank=100, ensemble_hidden_dim=256, mt_lda_weight=0.01, mlp_correlation_mix_residual_weight=0.8, gnn_correlation_mix_residual_weight=0.7, disable_two_step_pred=True, disable_reverse=False, disable_fingerprint=True, disable_mt_fingerprint=True, disable_mt_ontology=True, train_with_test_ratio=-1, train_with_test_ratio_hist_size=-1, full_dataset=True)
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 819/819 [00:15<00:00, 52.74it/s]
+Average rank 279.557 +- 1170.300
+Rank at 1 0.187
+Rank at 2 0.277
+Rank at 3 0.328
+Rank at 4 0.369
+Rank at 5 0.398
+Rank at 6 0.416
+Rank at 7 0.442
+Rank at 8 0.459
+Rank at 9 0.479
+Rank at 10 0.490
+Rank at 11 0.503
+Rank at 12 0.515
+Rank at 13 0.529
+Rank at 14 0.537
+Rank at 15 0.542
+Rank at 16 0.556
+Rank at 17 0.567
+Rank at 18 0.578
+Rank at 19 0.586
+Rank at 20 0.592
+
 ```
 
 #### References
