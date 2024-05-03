@@ -5,11 +5,11 @@
 
 A key challenge in metabolomics is annotating spectra measured from a biological sample with chemical identities. We improve on prior neural network-based annotation approaches, namely MLP-based [1] and GNN-based [2] approaches. We propose a novel ensemble model to take advantage of both MLP and GNN models. First, the MLP and GNN are enhanced by: 1) multi-tasking on additional data (spectral topic labels obtained using LDA (Latent Dirichlet Allocation) [3], and 2) attention mechanism to capture dependencies among spectra peaks. Next, we create an Ensembled Spectral Prediction (ESP) model that is trained on ranking tasks to generate the average weighted MLP and GNN spectral predictions. Our results, measured in average rank and Rank@K for the test spectra, show remarkable performance gain over existing neural network approaches.
 
-As our aim is to fundamentally evaluate deep learning models, we created two baseline methods that can be easily implemented and replicated (with our code, or others) to do comparisons: the MLP and GNN models, per Equations 1-10.  We have shown improvements with ESP over the MLP model (implementation of NEIMS model (Wei et al., 2019) with a generalized dataset ESI/LC-MS but not EI/GC-MS data in NEIMS), in terms of a 23.7% increase in average rank performance on the full NIST candidate set. We also show 37.2% improvement in average rank over the baseline GNN model, initially presented by our group (Hao et al., 2020), which was the first to use GNNs in mass spectra annotation. The MLP and GNN are the simplest possible baseline models for comparing ML techniques - they are easily implemented and suited for re-training and evaluation when comparing to other techniques and other datasets. The published model and published datasets are for CANOPUS data.
+As our aim is to fundamentally evaluate deep learning models, we created two baseline methods that can be easily implemented and replicated (with our code, or others) to do comparisons: the MLP and GNN models, per Equations 1-10.  We have shown improvements with ESP over the MLP model (implementation of NEIMS model (Wei et al., 2019) with a generalized dataset ESI/LC-MS but not EI/GC-MS data in NEIMS), in terms of a 23.7% increase in average rank performance on the full NIST candidate set. We also show 37.2% improvement in average rank over the baseline GNN model, initially presented by our group (Hao et al., 2020), which was the first to use GNNs in mass spectra annotation. The MLP and GNN are the simplest possible baseline models for comparing ML techniques - they are easily implemented and suited for re-training and evaluation when comparing to other techniques and other datasets. The published model and published datasets are for NPLIB1 data.
 
-In accordance with NIST license regulations, we are unable to publish the NIST-20 data alongside our models trained on NIST-20. Models pretrained on CANOPUS are located in /pretrained_models. CANOPUS dataset can be accessed from https://github.com/samgoldman97/mist.
+In accordance with NIST license regulations, we are unable to publish the NIST-20 data alongside our models trained on NIST-20. Models pre-trained on NPLIB1 are located in /pretrained_models. Instructions to download the preprocessed NPLIB1 dataset are included below.
 
-The pretrained MLP, GNN, and ESP models on the CANOPUS dataset are `/pretrained_models/best_model_mlp_can.pt`, `/pretrained_models/best_model_gnn_can.pt`, and `/pretrained_models/ESP_can.pt`, respectfully.
+The pretrained MLP, GNN, and ESP models on the NPLIB1 dataset are `/pretrained_models/best_model_mlp_can.pt`, `/pretrained_models/best_model_gnn_can.pt`, and `/pretrained_models/ESP_can.pt`, respectfully.
 
 ## Requirements
 
@@ -41,20 +41,20 @@ and install data generation environment, to run `data_trvate.py` and `data_tecan
 conda env create -f env_d.yml
 ```
 
-## Usage
-
 ### Data download
 
 Two files under data/final_5 are too large to be part of this git repository. These are mol_dict.pkl and pos_train.csv. These datasets are kept on zonodo.org and the path is given in the files of the same name under data/final_5. You can use the following commands to download these files:
 
+```
 cd data/final_5
 wget https://zenodo.org/records/10929401/files/pos_train.csv
 
 wget https://zenodo.org/records/10929354/files/mol_dict.pkl
+```
 
+pos_train.csv is the NPLIB1 dataset in csv format. mol_dict.pkl is a dictionary mapping InChiKeys to rdkit mol objects. You can also create mol_dict.pkl yourself if so required.
 
-pos_train.csv is the CANOPUS dataset in csv format. mol_dict.pkl is a dictionary mapping InChiKeys to rdkit mol objects. You can also create mol_dict.pkl yourself if so required.
-
+## Usage
 ### Data Preparation
 
 #### `data_trvate.py`
@@ -79,7 +79,7 @@ python data_tecand.py
 This script is used for training and restoring saved GNN and MLP models.
 
 #### `ens_train_canopus.py`
-This script is used for training and restoring saved ESP models on CANOPUS dataset.
+This script is used for training and restoring saved ESP models on NPLIB1 dataset.
 
 To run the saved GNN model on a test set, set `--te_cand_dataset_suffix` to the desired test set and `--model_file_suffix` to the model which you wish to use.
 
@@ -121,7 +121,7 @@ Before you train a new ESP model, you must have pretrained MLP and GNN models (s
 python ens_train_canopus.py --cuda 0 --disable_two_step_pred --disable_fingerprint --disable_mt_fingerprint --disable_mt_ontology   --correlation_mat_rank 100  --full_dataset --mode 'canopus'
 ```
 
-## Demo below shows results of the CANOPUS test data with all downloaded candidates.
+## Demo below shows results of the NPLIB1 test data with all downloaded candidates.
 ### To run the pretrained MLP
 
 ```
